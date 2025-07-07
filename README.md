@@ -1,4 +1,4 @@
-# Google Search Console CLI v1.1
+# kanmi-gsc-cli
 
 A command-line interface for Google Search Console API with OAuth authentication.
 
