@@ -4,16 +4,22 @@ import { Command } from 'commander';
 import * as dotenv from 'dotenv';
 import { getAuthClient, revokeToken } from './utils/auth';
 import { GSCClient } from './utils/gsc';
+import { loadConfig, saveConfig, getConfigPath, Config } from './utils/config';
+import { formatOutput } from './utils/formatter';
+import ora from 'ora';
 
 // Load environment variables
 dotenv.config();
+
+// Load user configuration
+const config = loadConfig();
 
 const program = new Command();
 
 program
   .name('gsc-cli')
   .description('Google Search Console CLI tool')
-  .version('1.0.0');
+  .version('1.1.0');
 
 // Auth command
 program
@@ -42,16 +48,63 @@ program
     }
   });
 
+// Config commands
+program
+  .command('config')
+  .description('Manage configuration settings')
+  .action(() => {
+    console.log('Current configuration:');
+    console.log(JSON.stringify(config, null, 2));
+    console.log(`\nConfig file location: ${getConfigPath()}`);
+  });
+
+program
+  .command('config-set <key> <value>')
+  .description('Set a configuration value')
+  .action((key: string, value: string) => {
+    const newConfig = { ...config };
+    
+    // Handle different value types
+    if (key === 'defaultRowLimit' || key === 'defaultStartDaysAgo' || key === 'defaultEndDaysAgo') {
+      (newConfig as any)[key] = parseInt(value, 10);
+    } else {
+      (newConfig as any)[key] = value;
+    }
+    
+    saveConfig(newConfig);
+    console.log(`Set ${key} = ${value}`);
+  });
+
+program
+  .command('config-reset')
+  .description('Reset configuration to defaults')
+  .action(() => {
+    const defaultConfig: Config = {
+      defaultDimensions: 'query',
+      defaultMetrics: 'clicks,impressions,ctr,position',
+      defaultRowLimit: 100,
+      defaultStartDaysAgo: 30,
+      defaultEndDaysAgo: 3,
+      outputFormat: 'table'
+    };
+    saveConfig(defaultConfig);
+    console.log('Configuration reset to defaults');
+  });
+
 // List sites command
 program
   .command('sites')
   .description('List all sites in Google Search Console')
   .action(async () => {
+    const spinner = ora('Loading sites...').start();
+    
     try {
       const authClient = await getAuthClient();
       const gscClient = new GSCClient(authClient);
       
       const sites = await gscClient.listSites();
+      
+      spinner.stop();
       
       if (sites.siteEntry && sites.siteEntry.length > 0) {
         console.log('Your sites:');
@@ -62,6 +115,7 @@ program
         console.log('No sites found in your Google Search Console account.');
       }
     } catch (error) {
+      spinner.stop();
       console.error('Failed to list sites:', error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
@@ -91,10 +145,14 @@ program
   .description('Query search analytics data for a site')
   .option('-s, --start-date <date>', 'Start date (YYYY-MM-DD)', getDefaultStartDate())
   .option('-e, --end-date <date>', 'End date (YYYY-MM-DD)', getDefaultEndDate())
-  .option('-d, --dimensions <dimensions>', 'Dimensions to group by (comma-separated)', 'query')
-  .option('-m, --metrics <metrics>', 'Metrics to include (comma-separated)', 'clicks,impressions,ctr,position')
-  .option('-r, --row-limit <limit>', 'Maximum number of rows to return', '100')
+  .option('-d, --dimensions <dimensions>', 'Dimensions to group by (comma-separated)', config.defaultDimensions)
+  .option('-m, --metrics <metrics>', 'Metrics to include (comma-separated)', config.defaultMetrics)
+  .option('-r, --row-limit <limit>', 'Maximum number of rows to return', config.defaultRowLimit?.toString())
+  .option('-o, --output <format>', 'Output format (table, json, csv)', config.outputFormat)
+  .option('--save-defaults', 'Save current options as defaults')
   .action(async (url: string, options: any) => {
+    const spinner = ora('Querying Google Search Console...').start();
+    
     try {
       const authClient = await getAuthClient();
       const gscClient = new GSCClient(authClient);
@@ -109,18 +167,36 @@ program
       
       const data = await gscClient.querySearchAnalytics(url, requestBody);
       
+      spinner.stop();
+      
       if (data.rows && data.rows.length > 0) {
-        console.log(`Search Analytics Data for ${url}:`);
-        console.log(`Date range: ${options.startDate} to ${options.endDate}`);
-        console.log('---');
-        
-        data.rows.forEach((row: any, index: number) => {
-          console.log(`${index + 1}. ${JSON.stringify(row, null, 2)}`);
-        });
+        const output = formatOutput(
+          url,
+          options.startDate,
+          options.endDate,
+          data.rows,
+          options.output
+        );
+        console.log(output);
       } else {
         console.log('No search analytics data found for the specified criteria.');
       }
+      
+      // Save defaults if requested
+      if (options.saveDefaults) {
+        const newConfig = { ...config };
+        newConfig.defaultDimensions = options.dimensions;
+        newConfig.defaultMetrics = options.metrics;
+        newConfig.defaultRowLimit = parseInt(options.rowLimit, 10);
+        newConfig.outputFormat = options.output;
+        if (!newConfig.defaultSite) {
+          newConfig.defaultSite = url;
+        }
+        saveConfig(newConfig);
+        console.log('\nDefaults saved to configuration.');
+      }
     } catch (error) {
+      spinner.stop();
       console.error('Failed to query search analytics:', error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
@@ -188,13 +264,13 @@ program
 // Helper functions
 function getDefaultStartDate(): string {
   const date = new Date();
-  date.setDate(date.getDate() - 30); // 30 days ago
+  date.setDate(date.getDate() - (config.defaultStartDaysAgo || 30));
   return date.toISOString().split('T')[0];
 }
 
 function getDefaultEndDate(): string {
   const date = new Date();
-  date.setDate(date.getDate() - 3); // 3 days ago (GSC data has a delay)
+  date.setDate(date.getDate() - (config.defaultEndDaysAgo || 3));
   return date.toISOString().split('T')[0];
 }
 

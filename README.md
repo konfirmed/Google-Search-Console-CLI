@@ -1,4 +1,4 @@
-# GSC CLI v1.0
+# GSC CLI v1.1
 
 A command-line interface for Google Search Console API with OAuth authentication.
 
@@ -9,6 +9,10 @@ A command-line interface for Google Search Console API with OAuth authentication
 - **Search Analytics**: Query search performance data
 - **Sitemap Management**: List, submit, and delete sitemaps
 - **Token Management**: Secure token storage and revocation
+- **Configuration Management**: Save and manage user preferences and defaults
+- **Multiple Output Formats**: Export data as table, JSON, or CSV
+- **Progress Indicators**: Visual feedback during API operations
+- **Default Persistence**: Save frequently used options as defaults
 
 ## Installation
 
@@ -100,6 +104,21 @@ gsc-cli auth
 gsc-cli revoke
 ```
 
+#### Configuration
+
+```bash
+# View current configuration
+gsc-cli config
+
+# Set a configuration value
+gsc-cli config-set defaultSite sc-domain:example.com
+gsc-cli config-set outputFormat json
+gsc-cli config-set defaultRowLimit 50
+
+# Reset configuration to defaults
+gsc-cli config-reset
+```
+
 #### Site Management
 
 ```bash
@@ -121,6 +140,15 @@ gsc-cli query https://example.com --start-date 2024-01-01 --end-date 2024-01-31
 
 # Query with specific dimensions and metrics
 gsc-cli query https://example.com --dimensions query,page --metrics clicks,impressions --row-limit 50
+
+# Output as JSON
+gsc-cli query https://example.com --output json
+
+# Output as CSV
+gsc-cli query https://example.com --output csv
+
+# Save current options as defaults
+gsc-cli query https://example.com --dimensions page --metrics clicks,impressions --save-defaults
 ```
 
 ##### Search Analytics Options
@@ -132,6 +160,9 @@ gsc-cli query https://example.com --dimensions query,page --metrics clicks,impre
 - `--metrics, -m`: Metrics to include (default: clicks,impressions,ctr,position)
   - Available: `clicks`, `impressions`, `ctr`, `position`
 - `--row-limit, -r`: Maximum rows to return (default: 100)
+- `--output, -o`: Output format (default: table)
+  - Available: `table`, `json`, `csv`
+- `--save-defaults`: Save current options as defaults
 
 #### Sitemap Management
 
