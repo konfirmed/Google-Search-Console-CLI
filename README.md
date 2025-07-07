@@ -1,4 +1,4 @@
-# GSC CLI v1.1
+# Google Search Console CLI v1.1
 
 A command-line interface for Google Search Console API with OAuth authentication.
 
